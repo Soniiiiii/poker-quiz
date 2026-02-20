@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Poker : Ranges et Équité</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-green-900 via-green-800 to-gray-900 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8 max-w-4xl"></div>
+
+    <script>
+        const questions = [
+            {
+                question: "Vous avez AK de pique. Le flop est QJ2 avec deux piques. Votre adversaire a probablement une overpaire (AA ou KK). Quelle est approximativement votre équité ?",
+                options: ["15-20%", "30-35%", "45-50%", "60-65%"],
+                correct: 1,
+                explanation: "Vous avez environ 30-35% d'équité avec un tirage couleur max (9 outs), un tirage quinte (8 outs supplémentaires), et 3 as qui peuvent vous donner la paire max."
+            },
+            {
+                question: "Le pot fait 100€, votre adversaire mise 50€. Quelle équité minimum devez-vous avoir pour que le call soit rentable ?",
+                options: ["25%", "33%", "40%", "50%"],
+                correct: 0,
+                explanation: "Vous devez payer 50€ pour gagner 150€ (pot initial + mise). Cote du pot = 50/(100+50+50) = 25%."
+            },
+            {
+                question: "Un joueur très serré relance en UTG. Quelle range lui attribuez-vous probablement ?",
+                options: ["Toutes les paires, A2s+", "99+, AK, AQ", "77+, AJ+, KQ", "Uniquement AA, KK, QQ, AK"],
+                correct: 1,
+                explanation: "Un joueur très serré en UTG aura typiquement 99+ et les premiums comme AK et AQ. C'est environ 6-8% des mains."
+            },
+            {
+                question: "Vous avez 88 au bouton. Un joueur en MP relance. Contre une range standard (22+, AJs+, KQs, AQo+), quelle est approximativement votre équité ?",
+                options: ["35-40%", "45-50%", "55-60%", "65-70%"],
+                correct: 1,
+                explanation: "Les 88 ont environ 45-50% d'équité contre cette range. Vous êtes devant les petites paires mais derrière les grosses."
+            },
+            {
+                question: "Le pot fait 80€, votre adversaire mise 120€ (overbet). De quelle équité avez-vous besoin minimum ?",
+                options: ["25%", "37.5%", "50%", "60%"],
+                correct: 1,
+                explanation: "Vous payez 120€ pour gagner 200€ (80+120). Cote = 120/320 = 37.5%."
+            },
+            {
+                question: "Vous avez 65 suited au bouton. Quelle est la meilleure description ?",
+                options: ["Main premium", "Connecteur suited avec bon potentiel en position", "Main trop faible", "Main qui doit toujours 3-bet"],
+                correct: 1,
+                explanation: "65s est un excellent connecteur suited avec une grande playabilité post-flop en position."
+            },
+            {
+                question: "Vous avez QQ en small blind. Un TAG relance en MP. Contre sa range (77+, AJs+, KQs, AQo+), quelle est votre équité ?",
+                options: ["50-55%", "60-65%", "70-75%", "80-85%"],
+                correct: 2,
+                explanation: "QQ a environ 70-75% d'équité. Vous dominez les paires inférieures. Seuls KK et AA vous dominent."
+            },
+            {
+                question: "Flop A72 avec deux carreaux. Vous avez A5 de carreau. Combien d'outs propres pour la couleur si adversaire a un set ?",
+                options: ["9 outs", "7 outs", "12 outs", "Ça dépend"],
+                correct: 1,
+                explanation: "9 carreaux dans le deck, mais 2 donnent le full à l'adversaire (7 et 2 de carreau). Donc 7 outs propres."
+            },
+            {
+                question: "Le pot fait 200€. Vous misez 100€ en bluff. Combien de fois adversaire doit-il folder pour que ce soit profitable ?",
+                options: ["33%", "40%", "50%", "66%"],
+                correct: 0,
+                explanation: "Vous risquez 100€ pour gagner 200€. Vous devez réussir 100/300 = 33% du temps."
+            },
+            {
+                question: "Quelle est la meilleure range d'ouverture au bouton ?",
+                options: ["Seulement les premiums", "Environ 20-25% des mains", "Environ 45-50% des mains", "100% des mains"],
+                correct: 2,
+                explanation: "Au bouton, vous pouvez ouvrir très large (45-50%) car vous avez la meilleure position."
+            },
+            {
+                question: "Vous avez JT suited. Flop K93 avec deux de votre couleur. Tirage couleur + gutshot. Combien d'outs ?",
+                options: ["9 outs", "12 outs", "15 outs", "13 outs"],
+                correct: 1,
+                explanation: "9 pour la couleur + 3 dames pour la quinte (la dame de votre couleur est déjà comptée) = 12 outs."
+            },
+            {
+                question: "Un joueur LAG 3-bet depuis le bouton. Quelle est probablement sa range ?",
+                options: ["Uniquement QQ+, AK", "TT+, AK, AQ", "Très polarisée : premiums + bluffs", "22+, Ax suited"],
+                correct: 2,
+                explanation: "Un LAG aura une range polarisée : mains premium pour value + bluffs. Rarement de vraies mains moyennes."
+            },
+            {
+                question: "Le pot fait 150€, vous misez 75€. Quelle proportion du pot ?",
+                options: ["25%", "33%", "50%", "75%"],
+                correct: 2,
+                explanation: "75€ représente 50% du pot de 150€. Mise half-pot standard."
+            },
+            {
+                question: "Vous avez AK en UTG. Quelle est la meilleure action pré-flop ?",
+                options: ["Limp", "Fold", "Relance", "Call"],
+                correct: 2,
+                explanation: "AK est une main premium qui doit être relancée en UTG. Limper avec AK est une énorme erreur."
+            },
+            {
+                question: "Flop K72. Vous misez, call. Turn 9, vous misez, call. River 3. Que représente probablement sa range ?",
+                options: ["Tirages ratés", "Kx faible", "Sets ou deux paires", "Mélange de Kx forts, sets, 99"],
+                correct: 3,
+                explanation: "En callant deux barrels sur board sec, il a probablement des rois forts, sets, deux paires, ou 99."
+            },
+            {
+                question: "Vous êtes en BB avec 72o. UTG ouvre, tout le monde fold. Quelle action ?",
+                options: ["Call", "Fold", "3-bet en bluff", "Call pour pot odds"],
+                correct: 1,
+                explanation: "72o est la pire main du poker. Contre une range UTG serrée, cette main perd de l'argent. Fold."
+            },
+            {
+                question: "Qu'est-ce qu'une range polarisée ?",
+                options: ["Que des premiums", "Mains très fortes ET bluffs, sans mains moyennes", "Seulement des paires", "Des mains suited"],
+                correct: 1,
+                explanation: "Une range polarisée contient des mains très fortes et des bluffs, mais peu de mains moyennes."
+            },
+            {
+                question: "Le pot fait 100€. Vous misez 200€. Combien de fois devez-vous gagner pour break-even ?",
+                options: ["33%", "50%", "66%", "75%"],
+                correct: 2,
+                explanation: "Vous risquez 200€ pour gagner 300€. Vous devez gagner 200/300 = 66% du temps quand appelé."
+            },
+            {
+                question: "Vous avez 54 de pique. Flop AKQ avec deux piques. Combien de cartes vous donnent la couleur ?",
+                options: ["7 cartes", "9 cartes", "11 cartes", "13 cartes"],
+                correct: 1,
+                explanation: "Il reste 9 piques dans le deck (13 total - 2 en main - 2 au flop)."
+            },
+            {
+                question: "Qu'est-ce que l'équité de blocage (blocker equity) ?",
+                options: ["Votre % de gagner", "Avoir des cartes qui bloquent certaines combos adverses", "Équité en heads-up", "Équité multiway"],
+                correct: 1,
+                explanation: "Les blockers sont les cartes que vous détenez et qui réduisent les combinaisons possibles dans la range adverse."
+            },
+            {
+                question: "Vous avez T9 de coeur. Board J8 2 4 avec deux coeurs au flop. Combien d'outs pour la quinte ?",
+                options: ["4 outs", "8 outs", "6 outs", "10 outs"],
+                correct: 1,
+                explanation: "4 dames et 4 sept = 8 outs pour la quinte."
+            },
+            {
+                question: "En UTG, quel pourcentage de mains devriez-vous ouvrir ?",
+                options: ["5-8%", "10-15%", "20-25%", "30-35%"],
+                correct: 1,
+                explanation: "En UTG, jouez serré. Une range de 10-15% est standard."
+            },
+            {
+                question: "Pot 80€, vous misez 40€, adversaire raise à 120€. Combien devez-vous payer ?",
+                options: ["80€", "120€", "40€", "160€"],
+                correct: 0,
+                explanation: "Vous aviez mis 40€. Adversaire raise à 120€ total. Vous payez 120€ - 40€ = 80€."
+            },
+            {
+                question: "Vous avez AQ. Flop Q73. Top paire top kicker. Équité contre set de 77 ?",
+                options: ["10-15%", "20-25%", "30-35%", "40-45%"],
+                correct: 0,
+                explanation: "Contre un set, vous avez 5 outs (3 dames et 2 as). Environ 10-12% d'équité."
+            },
+            {
+                question: "Qu'est-ce qu'un range merge ?",
+                options: ["Combiner value et bluffs", "Miser des mains moyennes comme value", "Jouer uniquement premiums", "Folder sa range"],
+                correct: 1,
+                explanation: "Range merging = miser des mains moyennes comme value, plutôt que polariser."
+            },
+            {
+                question: "Pot 100€. Adversaire mise pot (100€). Quelle cote du pot ?",
+                options: ["2:1", "3:1", "1:1", "4:1"],
+                correct: 0,
+                explanation: "Vous payez 100€ pour gagner 200€. Cote de 2:1, ou 33% d'équité nécessaire."
+            },
+            {
+                question: "Vous avez KK pré-flop. Un joueur serré vous 3-bet. Sa range probable ?",
+                options: ["QQ+, AK", "JJ+, AK, AQs", "TT+, AK, AQ", "Toutes paires"],
+                correct: 0,
+                explanation: "Un joueur serré qui 3-bet a généralement QQ+, AK. Range très tight d'environ 2-3%."
+            },
+            {
+                question: "Flop AKQ de trèfle. Vous avez JT de trèfle. Combien d'outs propres ?",
+                options: ["9 outs", "13 outs", "15 outs", "17 outs"],
+                correct: 2,
+                explanation: "9 trèfles + environ 6 cartes pour quinte (certains déjà comptés) = environ 15 outs."
+            },
+            {
+                question: "Qu'est-ce que le gap concept ?",
+                options: ["Distance entre positions", "Main plus forte pour call que pour ouvrir", "Écart entre value et bluff", "Temps entre décisions"],
+                correct: 1,
+                explanation: "Le gap concept : besoin d'une main plus forte pour caller une relance que pour ouvrir."
+            },
+            {
+                question: "Vous avez 33. Flop K93. Set. Équité contre top deux paires (K9) ?",
+                options: ["60-65%", "70-75%", "80-85%", "90-95%"],
+                correct: 2,
+                explanation: "Set contre deux paires = environ 80-85% d'équité. Deux paires ont 4 outs pour full."
+            },
+            {
+                question: "Pot 60€. Adversaire mise 30€. Quel % du pot ?",
+                options: ["33%", "50%", "66%", "75%"],
+                correct: 1,
+                explanation: "30€ représente 50% du pot de 60€. Mise half-pot."
+            },
+            {
+                question: "AK suited vs QQ pré-flop. Votre équité ?",
+                options: ["30-35%", "43-47%", "50-50%", "55-60%"],
+                correct: 1,
+                explanation: "AKs vs QQ = flip classique avec environ 43-47% pour AK."
+            },
+            {
+                question: "Qu'est-ce qu'une range capped ?",
+                options: ["Range sans les nuts", "Range très serrée", "Range de bluff", "Range équilibrée"],
+                correct: 0,
+                explanation: "Range capped = limitée en haut, ne contient pas les meilleures mains possibles."
+            },
+            {
+                question: "Bouton avec A5 suited. Joueur tight ouvre UTG. Meilleure action ?",
+                options: ["Call", "Fold", "3-bet", "Dépend du stack"],
+                correct: 1,
+                explanation: "A5s trop faible contre range UTG tight. Vous êtes dominé par AK, AQ, AJ. Fold."
+            },
+            {
+                question: "Pot 100€, adversaire mise 50€, vous relancez 150€. Il all-in 400€. Combien payer ?",
+                options: ["150€", "250€", "300€", "400€"],
+                correct: 1,
+                explanation: "Vous aviez mis 150€. All-in à 400€. Vous payez 400€ - 150€ = 250€."
+            },
+            {
+                question: "98 suited. Flop 762. Turn 5, quinte. Équité contre set de 77 ?",
+                options: ["55-60%", "65-70%", "75-80%", "85-90%"],
+                correct: 0,
+                explanation: "Quinte mais board paired. Set peut faire full sur 10 outs. Vous avez environ 55-60%."
+            },
+            {
+                question: "Différence entre implied odds et pot odds ?",
+                options: ["Aucune", "Implied odds incluent argent futur, pot odds argent actuel", "Pot odds meilleures", "Implied odds pour tournois"],
+                correct: 1,
+                explanation: "Pot odds = ratio actuel. Implied odds incluent l'argent futur potentiel."
+            },
+			{
+                question: "KQ de carreau. Board AJT8 avec deux carreaux. Combien d'outs propres avez-vous à la rivière ?",
+                options: ["9 outs", "12 outs", "15 outs", "17 outs"],
+                correct: 1,
+                explanation: "Vous avez 9 carreaux restants pour la couleur max. De plus, les 3 neufs restants (qui ne sont pas à carreau) vous donnent la quinte. Toucher un K ou une Q vous donne juste une paire, ce qui n'est pas un out solide sur ce board. Total : 9 + 3 = 12 outs propres."
+            },
+            {
+                question: "Adversaire ouvre MP, vous êtes au CO avec TT. Meilleure ligne ?",
+                options: ["Fold", "Call", "3-bet", "Dépend du joueur"],
+                correct: 3,
+                explanation: "TT = main complexe. Contre tight, 3-bet. Contre loose, call pour setmining. Ça dépend !"
+            },
+			{
+                question: "Flop KQJ. Vous avez AT (quinte max). Adversaire a A9. Votre équité ?",
+                options: ["50%", "75%", "95%", "100%"],
+                correct: 2,
+                explanation: "Avec AT sur KQJ, vous avez la quinte max. Attention, A9 n'a PAS de quinte, il a seulement hauteur As et un tirage quinte ventral (il a besoin d'un 10). Mais s'il touche un 10, le board affichera K-Q-J-T et il fera la MÊME quinte que vous (partage). L'adversaire a donc très peu d'équité (~5% de chance de partager), vous êtes à environ 95% !"
+            },
+            {
+                question: "Pot 200€. Vous misez 150€. Combien de fois bluff doit passer pour être profitable ?",
+                options: ["30%", "43%", "50%", "66%"],
+                correct: 1,
+                explanation: "Vous risquez 150€ pour gagner 200€. Besoin de 150/350 = 43% de réussite."
+            },
+            {
+                question: "76 de coeur en BB. Bouton ouvre, vous call. Flop 95 2 avec deux coeurs. Type de main ?",
+                options: ["Made hand", "Semi-bluff draw", "Pure bluff", "Nutted hand"],
+                correct: 1,
+                explanation: "Tirage couleur (9 outs) + gutshot (4 outs) = environ 12 outs. Excellent semi-bluff draw."
+            },
+            {
+                question: "Adversaire fait donk bet au flop. Que représente sa range ?",
+                options: ["Range très forte", "Range très faible", "Range polarisée ou déséquilibrée", "Range merged"],
+                correct: 2,
+                explanation: "Donk bets souvent soit très forts soit bluffs. Généralement déséquilibré."
+            },
+            {
+                question: "QJ suited. Board final KT952. Quinte. Adversaire mise pot. Devriez-vous raise ?",
+                options: ["Toujours raise", "Toujours call", "Ça dépend", "Fold"],
+                correct: 2,
+                explanation: "Avec QJ vous avez la quinte mais AJ bat votre quinte. Ça dépend de l'adversaire !"
+            },
+            {
+                question: "Qu'est-ce que le MDF (minimum defense frequency) ?",
+                options: ["% minimum à défendre pour ne pas être exploitable", "Nombre de bluffs", "Mise minimum", "% de fold acceptable"],
+                correct: 0,
+                explanation: "MDF = pourcentage de range à continuer pour empêcher adversaire de profiter avec bluffs purs."
+            },
+            {
+                question: "AA en UTG. Meilleur sizing d'ouverture ?",
+                options: ["Limp pour piéger", "Min-raise", "2.5-3bb standard", "5bb+ pour isoler"],
+                correct: 2,
+                explanation: "Avec AA en UTG, raise standard (2.5-3bb) pour construire le pot sans révéler votre force."
+            },
+            {
+                question: "Pot 100€. Vous misez 75€. Adversaire doit avoir quelle équité minimum pour call ?",
+                options: ["25%", "30%", "43%", "50%"],
+                correct: 1,
+                explanation: "Il paie 75€ pour gagner 175€. Besoin de 75/250 = 30% d'équité minimum."
+            },
+            {
+                question: "KK pré-flop. Flop AQJ. Adversaire mise. Votre équité si il a top paire (Ax) ?",
+                options: ["15-20%", "25-30%", "35-40%", "45-50%"],
+                correct: 1,
+                explanation: "KK sur AQJ = gutshot (dix) + 2 rois. Environ 8 outs = 30% contre top paire."
+            },
+            {
+                question: "Qu'est-ce qu'une leveling war ?",
+                options: ["Bataille de stacks", "Réfléchir à plusieurs niveaux de méta-game", "Type de tournoi", "Format cash game"],
+                correct: 1,
+                explanation: "Leveling war = penser à plusieurs niveaux de méta-game. Peut mener à overplay ou underplay."
+            },
+            {
+                question: "44. Flop K94. Set. Équité contre flush draw ?",
+                options: ["55-60%", "65-70%", "75-80%", "85-90%"],
+                correct: 1,
+                explanation: "Set contre flush draw = environ 65-70%. Flush draw a environ 35%."
+            }
+        ];
+
+        let currentQuestion = 0;
+        let score = 0;
+        let selectedAnswer = null;
+        let showAnswer = false;
+        let showQuestionNav = false;
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (currentQuestion >= questions.length) {
+                renderCompletion();
+                return;
+            }
+
+            const q = questions[currentQuestion];
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-green-600 overflow-hidden fade-in">
+                    <div class="bg-gradient-to-r from-green-800 to-green-700 p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-green-300 font-semibold text-lg">Question ${currentQuestion + 1}/${questions.length}</span>
+                            <div class="flex gap-2 items-center">
+                                <button onclick="toggleNav()" class="bg-green-700 hover:bg-green-600 text-white px-3 py-1 text-sm rounded">
+                                    📋 Navigation
+                                </button>
+                                <span class="text-white font-semibold text-lg">Score: ${score}/${questions.length}</span>
+                            </div>
+                        </div>
+                        
+                        ${showQuestionNav ? `
+                            <div class="mt-4 p-4 bg-gray-700 rounded-lg border border-green-600">
+                                <p class="text-white font-semibold mb-3">Aller à la question :</p>
+                                <div class="grid grid-cols-10 gap-2">
+                                    ${questions.map((_, idx) => `
+                                        <button onclick="goToQuestion(${idx})" 
+                                            class="w-10 h-10 p-0 ${idx === currentQuestion ? 'bg-green-600' : 'bg-gray-600'} hover:bg-green-500 text-white rounded">
+                                            ${idx + 1}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <h2 class="text-2xl font-bold text-white leading-relaxed mt-4">${q.question}</h2>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="space-y-3 mb-6">
+                            ${q.options.map((opt, idx) => `
+                                <button onclick="selectAnswer(${idx})" 
+                                    ${showAnswer ? 'disabled' : ''}
+                                    class="w-full text-left p-4 rounded-lg transition-all ${
+                                        showAnswer 
+                                            ? idx === q.correct
+                                                ? 'bg-green-600 text-white border-2 border-green-400'
+                                                : selectedAnswer === idx
+                                                ? 'bg-red-600 text-white border-2 border-red-400'
+                                                : 'bg-gray-700 text-gray-400'
+                                            : 'bg-gray-700 hover:bg-gray-600 text-white'
+                                    }">
+                                    <span class="font-bold mr-3">${String.fromCharCode(65 + idx)}.</span>
+                                    ${opt}
+                                    ${showAnswer && idx === q.correct ? ' ✓' : ''}
+                                    ${showAnswer && selectedAnswer === idx && idx !== q.correct ? ' ✗' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        
+                        ${showAnswer ? `
+                            <div class="bg-gray-700 rounded-lg p-4 border-2 border-green-600 fade-in">
+                                <p class="font-semibold text-green-400 mb-2">Explication :</p>
+                                <p class="text-gray-200 leading-relaxed mb-4">${q.explanation}</p>
+                                <button onclick="nextQuestion()" 
+                                    class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                                    ${currentQuestion < questions.length - 1 ? 'Question Suivante →' : 'Voir le Résultat 🎯'}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <a href="index.html" class="text-green-300 hover:text-green-200 underline">← Retour à l'accueil</a>
+                </div>
+            `;
+        }
+
+        function renderCompletion() {
+            const app = document.getElementById('app');
+            const percentage = Math.round((score / questions.length) * 100);
+            
+            let message = '';
+            if (percentage >= 90) message = "🏆 EXCEPTIONNEL ! Vous êtes un expert des ranges et de l'équité !";
+            else if (percentage >= 80) message = "⭐ EXCELLENT ! Vous maîtrisez très bien ces concepts !";
+            else if (percentage >= 70) message = "💪 TRÈS BON ! Vous avez de solides connaissances !";
+            else if (percentage >= 60) message = "👍 BON TRAVAIL ! Continuez à progresser !";
+            else if (percentage >= 50) message = "📚 Pas mal ! Relisez le cours et refaites le quiz !";
+            else message = "🎓 Continuez à étudier, ces concepts prennent du temps à maîtriser !";
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-green-600 p-8 fade-in">
+                    <div class="text-center mb-8">
+                        <h1 class="text-4xl font-bold text-white mb-2">Quiz Terminé !</h1>
+                        <div class="text-7xl font-bold text-green-400 my-6">${score}/${questions.length}</div>
+                        <div class="text-3xl text-white mb-4">Score : ${percentage}%</div>
+                        <p class="text-xl text-gray-300 px-4">${message}</p>
+                    </div>
+                    
+                    <div class="bg-gray-700 rounded-lg p-6 mb-6">
+                        <h3 class="text-xl font-semibold text-green-400 mb-4">Analyse détaillée</h3>
+                        <div class="space-y-2 text-gray-300">
+                            <div class="flex justify-between">
+                                <span>Réponses correctes :</span>
+                                <span class="text-green-400 font-semibold">${score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Réponses incorrectes :</span>
+                                <span class="text-red-400 font-semibold">${questions.length - score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Taux de réussite :</span>
+                                <span class="text-yellow-400 font-semibold">${percentage}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <button onclick="restart()" 
+                            class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg text-lg transition-colors">
+                            🔄 Recommencer le Quiz
+                        </button>
+                        <a href="index.html" 
+                            class="block w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-4 rounded-lg text-center transition-colors">
+                            ← Retour à l'accueil
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleNav() {
+            showQuestionNav = !showQuestionNav;
+            render();
+        }
+
+        function goToQuestion(idx) {
+            currentQuestion = idx;
+            selectedAnswer = null;
+            showAnswer = false;
+            showQuestionNav = false;
+            render();
+        }
+
+        function selectAnswer(idx) {
+            if (showAnswer) return;
+            selectedAnswer = idx;
+            showAnswer = true;
+            if (idx === questions[currentQuestion].correct) {
+                score++;
+            }
+            render();
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            selectedAnswer = null;
+            showAnswer = false;
+            render();
+        }
+
+        function restart() {
+            currentQuestion = 0;
+            score = 0;
+            selectedAnswer = null;
+            showAnswer = false;
+            showQuestionNav = false;
+            render();
+        }
+
+        render();
+    </script>
+</body>
+</html>

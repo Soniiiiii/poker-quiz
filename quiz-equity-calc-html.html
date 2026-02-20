@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Poker : Calcul d'Équité</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-900 via-blue-800 to-gray-900 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8 max-w-4xl"></div>
+
+    <script>
+        const questions = [
+            {
+                question: "Vous avez 9♠8♠. Flop : K♠5♠2♣. Combien avez-vous d'outs pour la couleur ?",
+                options: ["7 outs", "9 outs", "11 outs", "13 outs"],
+                correct: 1,
+                explanation: "Total de piques = 13. Vous en avez 2 en main + 2 au flop = 4 déjà vues. Restent 13 - 4 = 9 OUTS pour votre couleur. C'est le tirage classique !"
+            },
+            {
+                question: "Même situation (9♠8♠, flop K♠5♠2♣). Quelle est votre équité approximative d'ici la rivière avec la règle du 4 ?",
+                options: ["18%", "27%", "36%", "45%"],
+                correct: 2,
+                explanation: "Règle du 4 au flop : Outs × 4 = Équité. Donc 9 × 4 = 36%. Le calcul précis donne ~35%, donc la règle du 4 est excellente pour une approximation rapide !"
+            },
+            {
+                question: "Vous avez T♥9♦. Flop : K♣J♠3♥. Combien d'outs pour la quinte (gutshot) ?",
+                options: ["2 outs", "4 outs", "6 outs", "8 outs"],
+                correct: 1,
+                explanation: "Seule la dame (Q) complète votre quinte : K-Q-J-T-9. Il y a 4 dames dans le deck (Q♠, Q♥, Q♦, Q♣), donc 4 OUTS. Un gutshot a toujours exactement 4 outs !"
+            },
+            {
+                question: "Même situation (gutshot avec 4 outs). Quelle est votre équité d'ici la rivière ?",
+                options: ["8%", "16%", "24%", "32%"],
+                correct: 1,
+                explanation: "Règle du 4 : 4 outs × 4 = 16% d'équité. Le gutshot est un tirage faible, c'est pourquoi on ne peut généralement pas caller de grosses mises avec seulement ça !"
+            },
+            {
+                question: "Vous avez 8♣7♣. Flop : 9♥6♦2♠. Quel type de tirage quinte avez-vous ?",
+                options: ["Gutshot (4 outs)", "Tirage quinte ouvert (8 outs)", "Double gutshot (8 outs)", "Pas de tirage"],
+                correct: 1,
+                explanation: "Vous avez un OESD (Open-Ended Straight Draw). Les dix (T) et les cinq (5) complètent votre quinte. 4 dix + 4 cinq = 8 OUTS. C'est deux fois plus fort qu'un gutshot !"
+            },
+            {
+                question: "Tirage quinte ouvert : 8 outs. Équité d'ici la rivière ?",
+                options: ["16%", "24%", "32%", "40%"],
+                correct: 2,
+                explanation: "Règle du 4 : 8 × 4 = 32%. Un OESD a une équité similaire à un tirage couleur légèrement plus faible. C'est un bon tirage pour semi-bluffer ou caller des mises raisonnables !"
+            },
+            {
+                question: "Vous avez Q♥J♥. Flop : T♥9♠2♥. Combien d'outs au TOTAL (couleur + quinte) ?",
+                options: ["12 outs", "15 outs", "17 outs", "19 outs"],
+                correct: 1,
+                explanation: "Couleur : 9 cœurs. Quinte : 4 rois (K) + 4 huit (8) = 8. MAIS le K♥ et 8♥ sont déjà comptés dans les cœurs ! Donc 9 + 6 = 15 OUTS. Attention aux doubles comptages !"
+            },
+            {
+                question: "Tirage combiné avec 15 outs. Quelle est votre équité ?",
+                options: ["45%", "52%", "60%", "68%"],
+                correct: 2,
+                explanation: "Règle du 4 : 15 × 4 = 60% ! Vous êtes FAVORI même contre une main faite comme top paire. Les tirages combinés (couleur + quinte) sont les plus puissants au poker !"
+            },
+            {
+                question: "Vous avez 7♦7♣. Flop : A♠K♥9♣. Combien d'outs pour toucher un set ?",
+                options: ["2 outs", "3 outs", "4 outs", "6 outs"],
+                correct: 0,
+                explanation: "Il reste seulement 2 sept dans le deck (7♠ et 7♥). 2 OUTS. C'est très peu ! Équité au flop : 2 × 4 = 8%. C'est pourquoi on ne peut pas caller de grosses mises juste pour toucher un set, sauf avec de bonnes implied odds."
+            },
+            {
+                question: "Paire pour set (2 outs). Le pot est 100€, adversaire mise 75€. Avez-vous les pot odds pour call ?",
+                options: ["Oui, call", "Non, fold", "Ça dépend des implied odds", "Call seulement en position"],
+                correct: 2,
+                explanation: "Pot odds = 75/250 = 30%. Votre équité = 8%. Mathématiquement c'est FOLD (8% < 30%). MAIS si les stacks sont profonds (100bb+), les IMPLIED ODDS peuvent justifier le call car vous gagnerez gros quand vous touchez !"
+            },
+            {
+                question: "Vous avez A♦5♦. Flop : K♦7♦2♣. Adversaire a un set de 77. Combien d'outs PROPRES pour votre couleur ?",
+                options: ["7 outs", "8 outs", "9 outs", "10 outs"],
+                correct: 0,
+                explanation: "9 carreaux restants MAIS le 7♦ et le 2♦ donnent un FULL à l'adversaire (777-KK ou 777-22). Ce sont des 'outs sales'. Outs propres = 9 - 2 = 7 OUTS. Équité réelle : ~28% au lieu de 36% !"
+            },
+            {
+                question: "Qu'est-ce qu'un 'out sale' ?",
+                options: ["Un out qui ne touche jamais", "Un out qui améliore votre main mais peut aussi améliorer l'adversaire", "Un out pour une couleur", "Un out pour une quinte"],
+                correct: 1,
+                explanation: "Un OUT SALE améliore votre main MAIS peut donner une meilleure main à l'adversaire. Ex: vous faites couleur mais il fait full. Il faut toujours se demander : 'Si je touche cet out, est-ce que je gagne vraiment ?' !"
+            },
+            {
+                question: "Vous avez A♣K♥. Flop : Q♠9♦4♣. Adversaire a probablement une paire. Combien d'outs pour toucher une paire supérieure ?",
+                options: ["3 outs", "6 outs", "9 outs", "12 outs"],
+                correct: 1,
+                explanation: "3 as + 3 rois = 6 OUTS. Ce sont les 'deux overcards'. ATTENTION : ces outs ne sont pas toujours propres ! Si adversaire a AQ ou KQ, toucher votre paire ne vous donne pas forcément la meilleure main."
+            },
+            {
+                question: "Deux overcards (6 outs). Équité approximative d'ici la rivière ?",
+                options: ["12%", "18%", "24%", "30%"],
+                correct: 2,
+                explanation: "Règle du 4 : 6 × 4 = 24%. Mais dans la réalité, avec des outs potentiellement sales, l'équité réelle est souvent plus proche de 20%. AK vs une paire moyenne est un 'race' ou 'flip' légèrement défavorable."
+            },
+            {
+                question: "Vous avez 6♥5♥. Board au turn : A♥K♣7♥3♠. Combien d'outs pour la couleur à la rivière ?",
+                options: ["7 outs", "8 outs", "9 outs", "10 outs"],
+                correct: 2,
+                explanation: "Toujours 9 cœurs restants ! Le nombre d'outs ne change pas entre le flop et le turn. Ce qui change c'est qu'il ne reste plus qu'UNE carte à venir au lieu de deux."
+            },
+            {
+                question: "Au turn avec 9 outs. Quelle règle utilisez-vous pour calculer l'équité à la rivière ?",
+                options: ["Règle du 4", "Règle du 2", "Règle du 3", "Règle du 5"],
+                correct: 1,
+                explanation: "Au TURN, utilisez la RÈGLE DU 2 : Outs × 2 = Équité. Donc 9 × 2 = 18%. Au FLOP c'est la règle du 4 (2 cartes à venir), au TURN c'est la règle du 2 (1 carte à venir)."
+            },
+            {
+                question: "Tirage couleur au turn (9 outs). Le pot est 200€, adversaire mise 100€. Call ou fold ?",
+                options: ["Call évident", "Fold évident", "C'est limite, ça dépend", "Raise pour semi-bluff"],
+                correct: 2,
+                explanation: "Pot odds = 100/400 = 25%. Votre équité = 18%. Mathématiquement c'est FOLD (18% < 25%). MAIS les IMPLIED ODDS peuvent justifier le call si vous pouvez extraire plus de value quand vous touchez. En position c'est souvent call, hors position c'est fold."
+            },
+            {
+                question: "Vous avez Q♠J♠. Flop : A♠7♣3♥. Combien de piques avez-vous déjà ?",
+                options: ["2 piques", "3 piques", "4 piques", "5 piques"],
+                correct: 1,
+                explanation: "2 en main (Q♠J♠) + 1 au flop (A♠) = 3 PIQUES. C'est ce qu'on appelle un 'tirage backdoor couleur' - vous avez besoin de 2 piques consécutives (turn ET rivière) pour faire couleur."
+            },
+            {
+                question: "Tirage backdoor couleur (3 piques sur 5 cartes). Quelle est l'équité approximative ?",
+                options: ["2-3%", "4-5%", "8-10%", "12-15%"],
+                correct: 1,
+                explanation: "Un tirage BACKDOOR a seulement ~4-5% de chances de se compléter. C'est TRÈS faible ! Ne comptez jamais là-dessus pour justifier un call. C'est juste un bonus si vous avez déjà d'autres raisons de continuer."
+            },
+            {
+                question: "Backdoor couleur : 4-5% d'équité. Adversaire mise pot. Que faites-vous ?",
+                options: ["Call", "Fold", "Raise en bluff", "Check"],
+                correct: 1,
+                explanation: "FOLD IMMÉDIAT ! Pour caller une mise pot, vous avez besoin de 50% d'équité. 4-5% c'est ridiculement insuffisant. Ne gaspillez pas votre argent sur des tirages backdoor !"
+            },
+            {
+                question: "Vous avez J♣T♣. Flop : K♣9♠4♣. Listez vos outs : couleur + quinte + paires. Combien au total (sans les paires) ?",
+                options: ["9 outs", "12 outs", "15 outs", "17 outs"],
+                correct: 2,
+                explanation: "Couleur : 9 trèfles. Quinte : 4 dames + 4 huit = 8 (mais Q♣ et 8♣ déjà comptés). Total : 9 + 6 = 15 OUTS. Les paires (valets et dix) ne sont probablement pas assez fortes contre un roi, donc on ne les compte pas."
+            },
+            {
+                question: "Multi-draw (15 outs). Pot : 150€, adversaire mise 100€. Quelle équité minimum nécessaire ?",
+                options: ["25%", "28.6%", "33%", "40%"],
+                correct: 1,
+                explanation: "Pot odds = 100/350 = 28.6%. Votre équité avec 15 outs = 60% ! C'est un CALL ÉVIDENT et même un raise peut être justifié car vous êtes largement favori (60% >> 28.6%) !"
+            },
+            {
+                question: "Vous avez 88. Adversaire a AK. C'est un 'flip' pré-flop. Quelle est approximativement votre équité ?",
+                options: ["40-45%", "50-50%", "54-56%", "60-65%"],
+                correct: 2,
+                explanation: "88 vs AK est un RACE/FLIP classique. La paire a ~54% et les overcards ~46%. Ce n'est pas exactement 50-50 mais assez proche. C'est pourquoi on appelle ça un 'coinflip' !"
+            },
+            {
+                question: "Vous avez AA. Adversaire a KK pré-flop. Quelle est votre équité ?",
+                options: ["70%", "76%", "82%", "88%"],
+                correct: 2,
+                explanation: "Une OVERPAIRE contre une UNDERPAIRE a toujours environ 82% d'équité. C'est vrai pour AA vs KK, KK vs QQ, QQ vs JJ, etc. C'est une des situations les plus dominantes au poker !"
+            },
+            {
+                question: "Flop : K♠7♦2♣. Vous avez K♥Q♥ (top paire). Adversaire a A♠5♠ (tirage couleur). Qui est favori ?",
+                options: ["Top paire ~60%", "Tirage couleur ~60%", "C'est 50-50", "Top paire ~80%"],
+                correct: 0,
+                explanation: "TOP PAIRE ~60% vs TIRAGE COULEUR ~40%. La main faite est favorite mais le tirage a quand même une bonne équité (~36% avec la règle du 4). C'est pourquoi il faut charger les tirages !"
+            },
+            {
+                question: "Vous avez 9♦9♣ (set). Adversaire a J♠T♠ (tirage couleur + quinte ouvert). Qui est favori ?",
+                options: ["Set largement favori ~80%", "Set légèrement favori ~55%", "Tirage favori ~55%", "C'est quasi 50-50"],
+                correct: 3,
+                explanation: "C'est presque un FLIP ! Le tirage combiné a ~15 outs = 60% d'équité, le set a ~40-45%. C'est pourquoi les gros tirages sont si dangereux ! Même un set n'est pas en sécurité contre un tirage monstre."
+            },
+            {
+                question: "Flop : K♠7♦2♣. Vous avez A♠A♥. Adversaire a 7♠7♥ (set). Quelle est votre équité ?",
+                options: ["2%", "9%", "18%", "27%"],
+                correct: 1,
+                explanation: "Seulement ~9% ! Vous avez 2 OUTS (les deux as restants) pour faire un meilleur set. Contre un set, même les ACES sont presque morts. C'est pourquoi il faut faire attention aux boards qui peuvent donner des sets."
+            },
+            {
+                question: "Vous avez A♣K♦ (top deux paires). Adversaire a Q♠J♠ (couleur). Board final : A♠K♥7♠5♠2♦. Quelle est votre équité ?",
+                options: ["0%", "10%", "20%", "30%"],
+                correct: 0,
+                explanation: "0% ! La couleur BAT deux paires et il n'y a plus de cartes à venir. Vous avez perdu. Il n'y a AUCUNE carte qui peut vous sauver à ce stade. Même le meilleur full house possible nécessiterait une autre carte."
+            },
+            {
+                question: "Calcul rapide : Vous avez 12 outs au flop. Équité approximative d'ici la rivière ?",
+                options: ["24%", "36%", "48%", "60%"],
+                correct: 2,
+                explanation: "Règle du 4 : 12 × 4 = 48%. C'est presque un coinflip ! Exemples de 12 outs : couleur + gutshot (9 + 3), ou quinte ouverte + deux overcards (8 + 6 - 2 doublons)."
+            },
+            {
+                question: "Au turn, vous avez 6 outs. Équité à la rivière ?",
+                options: ["6%", "12%", "18%", "24%"],
+                correct: 1,
+                explanation: "Règle du 2 au turn : 6 × 2 = 12%. Rappelez-vous : au FLOP c'est × 4 (2 cartes à venir), au TURN c'est × 2 (1 carte à venir)."
+            }
+        ];
+
+        let currentQuestion = 0;
+        let score = 0;
+        let selectedAnswer = null;
+        let showAnswer = false;
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (currentQuestion >= questions.length) {
+                renderCompletion();
+                return;
+            }
+
+            const q = questions[currentQuestion];
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-blue-600 overflow-hidden fade-in">
+                    <div class="bg-gradient-to-r from-blue-800 to-blue-700 p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-blue-300 font-semibold text-lg">Question ${currentQuestion + 1}/${questions.length}</span>
+                            <span class="text-white font-semibold text-lg">Score: ${score}/${questions.length}</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white leading-relaxed">${q.question}</h2>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="space-y-3 mb-6">
+                            ${q.options.map((opt, idx) => `
+                                <button onclick="selectAnswer(${idx})" 
+                                    ${showAnswer ? 'disabled' : ''}
+                                    class="w-full text-left p-4 rounded-lg transition-all ${
+                                        showAnswer 
+                                            ? idx === q.correct
+                                                ? 'bg-green-600 text-white border-2 border-green-400'
+                                                : selectedAnswer === idx
+                                                ? 'bg-red-600 text-white border-2 border-red-400'
+                                                : 'bg-gray-700 text-gray-400'
+                                            : 'bg-gray-700 hover:bg-gray-600 text-white'
+                                    }">
+                                    <span class="font-bold mr-3">${String.fromCharCode(65 + idx)}.</span>
+                                    ${opt}
+                                    ${showAnswer && idx === q.correct ? ' ✓' : ''}
+                                    ${showAnswer && selectedAnswer === idx && idx !== q.correct ? ' ✗' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        
+                        ${showAnswer ? `
+                            <div class="bg-gray-700 rounded-lg p-4 border-2 border-blue-600 fade-in">
+                                <p class="font-semibold text-blue-400 mb-2">Explication :</p>
+                                <p class="text-gray-200 leading-relaxed mb-4">${q.explanation}</p>
+                                <button onclick="nextQuestion()" 
+                                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                                    ${currentQuestion < questions.length - 1 ? 'Question Suivante →' : 'Voir le Résultat 🎯'}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <a href="index.html" class="text-blue-300 hover:text-blue-200 underline">← Retour à l'accueil</a>
+                </div>
+            `;
+        }
+
+        function renderCompletion() {
+            const app = document.getElementById('app');
+            const percentage = Math.round((score / questions.length) * 100);
+            
+            let message = '';
+            if (percentage >= 90) message = "🏆 PARFAIT ! Vous êtes un expert du calcul d'équité !";
+            else if (percentage >= 80) message = "⭐ EXCELLENT ! Vous maîtrisez très bien les calculs !";
+            else if (percentage >= 70) message = "💪 TRÈS BON ! Solides connaissances en équité !";
+            else if (percentage >= 60) message = "👍 BON ! Continuez à pratiquer !";
+            else if (percentage >= 50) message = "📚 Pas mal ! Relisez le cours et refaites le quiz !";
+            else message = "🎓 Continuez ! Le calcul d'équité demande de la pratique !";
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-blue-600 p-8 fade-in">
+                    <div class="text-center mb-8">
+                        <h1 class="text-4xl font-bold text-white mb-2">Quiz Terminé !</h1>
+                        <div class="text-7xl font-bold text-blue-400 my-6">${score}/${questions.length}</div>
+                        <div class="text-3xl text-white mb-4">Score : ${percentage}%</div>
+                        <p class="text-xl text-gray-300 px-4">${message}</p>
+                    </div>
+                    
+                    <div class="bg-gray-700 rounded-lg p-6 mb-6">
+                        <h3 class="text-xl font-semibold text-blue-400 mb-4">Analyse détaillée</h3>
+                        <div class="space-y-2 text-gray-300">
+                            <div class="flex justify-between">
+                                <span>Réponses correctes :</span>
+                                <span class="text-green-400 font-semibold">${score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Réponses incorrectes :</span>
+                                <span class="text-red-400 font-semibold">${questions.length - score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Taux de réussite :</span>
+                                <span class="text-yellow-400 font-semibold">${percentage}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <button onclick="restart()" 
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-lg text-lg transition-colors">
+                            🔄 Recommencer le Quiz
+                        </button>
+                        <a href="index.html" 
+                            class="block w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-4 rounded-lg text-center transition-colors">
+                            ← Retour à l'accueil
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function selectAnswer(idx) {
+            if (showAnswer) return;
+            selectedAnswer = idx;
+            showAnswer = true;
+            if (idx === questions[currentQuestion].correct) {
+                score++;
+            }
+            render();
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            selectedAnswer = null;
+            showAnswer = false;
+            render();
+        }
+
+        function restart() {
+            currentQuestion = 0;
+            score = 0;
+            selectedAnswer = null;
+            showAnswer = false;
+            render();
+        }
+
+        render();
+    </script>
+</body>
+</html>

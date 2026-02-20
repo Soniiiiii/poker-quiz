@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Poker : Pot Odds et Profitabilité</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-purple-900 via-purple-800 to-gray-900 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8 max-w-4xl"></div>
+
+    <script>
+        const questions = [
+            {
+                question: "POT : 100€ | MISE ADVERSAIRE : 50€ | VOTRE ÉQUITÉ : 30%. Call ou fold ?",
+                options: ["CALL profitable", "FOLD", "Break-even", "Raise"],
+                correct: 0,
+                explanation: "POT ODDS : Vous payez 50€ pour gagner 150€ (100+50). Cote = 50/200 = 25%. Votre équité 30% > 25% nécessaire → CALL PROFITABLE ! Vous gagnez de l'argent à long terme."
+            },
+            {
+                question: "POT : 80€ | MISE ADVERSAIRE : 60€ | VOTRE ÉQUITÉ : 35%. Call ou fold ?",
+                options: ["CALL profitable", "FOLD", "Break-even", "Ça dépend"],
+                correct: 3,
+                explanation: "POT ODDS : 60/(80+60+60) = 60/200 = 30%. Votre équité 35% > 30% donc mathématiquement c'est call... MAIS c'est très marginal (seulement 5% d'edge) et hors position ou avec équité non réalisée, c'est souvent FOLD selon la situation."
+            },
+			{
+                question: "POT : 200€ | MISE ADVERSAIRE : 100€ (demi-pot). Quelle équité minimum pour call ?",
+                options: ["25%", "33%", "40%", "50%"],
+                correct: 0,
+                explanation: "POT ODDS = Mise à payer / Pot total APRÈS votre call. Vous payez 100€ pour un pot final qui fera 400€ (200 pot initial + 100 mise adverse + 100 votre call). Donc 100/400 = 25% d'équité nécessaire."
+            },
+			{
+                question: "POT : 150€ | ADVERSAIRE MISE : 75€ (50% pot). Pot odds ?",
+                options: ["25%", "33%", "40%", "50%"],
+                correct: 0,
+                explanation: "POT ODDS = Mise à payer / Pot total après call = 75 / (150 + 75 + 75) = 75 / 300 = 25%. C'est la seule formule correcte à retenir !"
+            },
+            {
+                question: "POT : 100€ | MISE : 50€ | Vous avez tirage couleur (9 outs au flop). Call ou fold ?",
+                options: ["CALL (équité > pot odds)", "FOLD (équité < pot odds)", "Break-even", "Raise en semi-bluff"],
+                correct: 0,
+                explanation: "POT ODDS = 50/200 = 25%. Votre équité = 9×4 = 36%. 36% > 25% → CALL PROFITABLE ! En plus, vous pouvez même envisager un raise en semi-bluff car vous avez de la fold equity + bonne équité."
+            },
+            {
+                question: "POT : 60€ | MISE : 90€ (overbet 150%). Vous avez gutshot (4 outs). Call ou fold ?",
+                options: ["CALL", "FOLD évident", "Ça dépend de la position", "Call avec implied odds"],
+                correct: 1,
+                explanation: "POT ODDS = 90/(60+90+90) = 90/240 = 37.5%. Votre équité = 4×4 = 16%. 16% << 37.5% → FOLD ÉVIDENT ! Même avec implied odds, c'est trop loin. Les overbets donnent de mauvaises cotes."
+            },
+            {
+                question: "POT : 120€ | MISE : 40€ (33% pot). Tirage quinte ouvert (8 outs). Call ou fold ?",
+                options: ["CALL large", "FOLD", "Break-even", "Raise"],
+                correct: 0,
+                explanation: "POT ODDS = 40/(120+40+40) = 40/200 = 20%. Votre équité = 8×4 = 32%. 32% > 20% → CALL TRÈS PROFITABLE ! Les petites mises donnent d'excellentes cotes. Vous avez 12% d'edge !"
+            },
+            {
+                question: "POT : 200€ | ALL-IN ADVERSAIRE : 150€ | Votre équité : 28%. Call ou fold ?",
+                options: ["CALL", "FOLD", "C'est exactement break-even", "Reraise"],
+                correct: 1,
+                explanation: "POT ODDS = 150/(200+150+150) = 150/500 = 30%. Votre équité = 28%. 28% < 30% → FOLD (vous perdez 2% d'EV). C'est marginal mais mathématiquement c'est -EV. En tournoi avec ICM ça peut changer."
+            },
+            {
+                question: "POT : 100€ | MISE : 50€ | Vous êtes au TURN avec tirage couleur (9 outs). Call ou fold ?",
+                options: ["CALL", "FOLD", "Ça dépend", "Raise"],
+                correct: 2,
+                explanation: "POT ODDS = 50/200 = 25%. Au TURN équité = 9×2 = 18% (règle du 2 !). 18% < 25% → mathématiquement FOLD. MAIS avec implied odds (gagner plus à la rivière si vous touchez), ça peut être CALL en position."
+            },
+            {
+                question: "POT : 80€ | MISE : 120€. Vous avez 2 outs (pour set). Call ou fold ?",
+                options: ["CALL avec implied odds", "FOLD sans hésiter", "Call si stacks profonds", "Les deux B et C"],
+                correct: 3,
+                explanation: "POT ODDS = 120/(80+120+120) = 120/320 = 37.5%. Équité = 2×4 = 8%. 8% << 37.5% → normalement FOLD. MAIS si stacks très profonds (150bb+) et adversaire payant, les IMPLIED ODDS peuvent justifier. Sinon FOLD !"
+            },
+            {
+                question: "POT : 150€ | VOUS MISEZ : 75€ | ADVERSAIRE RAISE à 225€. Combien devez-vous payer ?",
+                options: ["75€", "150€", "225€", "300€"],
+                correct: 1,
+                explanation: "Vous aviez déjà mis 75€. Adversaire raise à 225€ TOTAL. Vous devez payer 225€ - 75€ = 150€ supplémentaires. Pot total si vous call = 150+75+225+150 = 600€."
+            },
+            {
+                question: "Suite question précédente : Pot 150€, vous misez 75€, il raise à 225€. Quelle équité minimum pour call les 150€ ?",
+                options: ["25%", "30%", "33%", "37.5%"],
+                correct: 0,
+                explanation: "POT ODDS = 150/(150+75+225+150) = 150/600 = 25%. Attention : on compte TOUT l'argent qui sera dans le pot, y compris ce que vous avez déjà mis !"
+            },
+            {
+                question: "POT : 100€ | MISE : 200€ (overbet 2x pot). Quelle équité minimum ?",
+                options: ["33%", "40%", "50%", "40%"],
+                correct: 3,
+                explanation: "POT ODDS = 200/(100+200+200) = 200/500 = 40%. Les gros overbets demandent BEAUCOUP d'équité. Vous payez 200 pour gagner potentiellement 500, donc besoin de 40% d'équité minimum."
+            },
+            {
+                question: "POT : 50€ | MISE : 25€. Tirage backdoor couleur (~4%). Call ou fold ?",
+                options: ["CALL", "FOLD total", "Ça dépend", "Call pour bluff later"],
+                correct: 1,
+                explanation: "POT ODDS = 25/(50+25+25) = 25/100 = 25%. Équité backdoor = 4%. 4% << 25% → FOLD COMPLET ! Ne comptez jamais sur un backdoor pour justifier un call. C'est du gaspillage d'argent."
+            },
+            {
+                question: "POT : 300€ | ADVERSAIRE ALL-IN : 200€ | Équité : 40%. Call profitable ?",
+                options: ["OUI, +EV", "NON, -EV", "Break-even exact", "Pas assez d'infos"],
+                correct: 0,
+                explanation: "POT ODDS = 200/(300+200+200) = 200/700 = 28.6%. Équité = 40%. 40% > 28.6% → CALL PROFITABLE (+EV) ! Vous avez environ 11.4% d'edge, ce qui est énorme."
+            },
+            {
+                question: "POT : 100€ | MISE : 75€ | Vous avez AK (6 outs pour overcards). Call profitable ?",
+                options: ["OUI si outs propres", "NON équité trop faible", "Toujours call", "Jamais call"],
+                correct: 0,
+                explanation: "POT ODDS = 75/(100+75+75) = 75/250 = 30%. Équité = 6×4 = 24%. Normalement 24% < 30% = FOLD. MAIS si vos outs sont propres et vous avez implied odds, ça peut être call. Ça DÉPEND de la situation !"
+            },
+            {
+                question: "POT : 150€ | MISE : 50€ (33% pot). Vous avez tirage combiné (15 outs). Quelle action ?",
+                options: ["Call seulement", "Raise pour value", "Fold", "Check"],
+                correct: 1,
+                explanation: "POT ODDS = 50/(150+50+50) = 50/250 = 20%. Équité = 15×4 = 60% ! Vous êtes FAVORI. Ne vous contentez pas de call → RAISE pour value et protection ! Vous voulez construire le pot quand vous êtes favori."
+            },
+            {
+                question: "POT : 80€ | VOUS MISEZ : 40€ | ADVERSAIRE MIN-RAISE à 80€. Combien payer ?",
+                options: ["40€", "80€", "120€", "160€"],
+                correct: 0,
+                explanation: "Vous aviez mis 40€. Il raise à 80€ total. Vous payez 80€ - 40€ = 40€ supplémentaires. Min-raise = doubler la mise initiale."
+            },
+            {
+                question: "Suite : Pot 80€, vous misez 40€, il min-raise à 80€. Pot odds pour payer 40€ ?",
+                options: ["17%", "20%", "25%", "33%"],
+                correct: 0,
+                explanation: "POT ODDS = 40/(80+40+80+40) = 40/240 = 16.7% ≈ 17%. Les min-raises donnent d'EXCELLENTES cotes ! C'est pourquoi on fold rarement face à un min-raise."
+            },
+            {
+                question: "POT : 200€ | MISE : 300€ (overbet 1.5x). Vous avez top paire. Équité estimée 65%. Call ?",
+                options: ["OUI large", "NON probable bluff", "Ça dépend adversaire", "Raise"],
+                correct: 2,
+                explanation: "POT ODDS = 300/(200+300+300) = 300/800 = 37.5%. Votre équité estimée = 65%. Mathématiquement CALL. MAIS un overbet est souvent polarisé (nuts ou bluff). Avec top paire, êtes-vous vraiment à 65% contre SA RANGE ? Ça dépend !"
+            },
+            {
+                question: "POT : 150€ | MISE : 100€ | Tirage couleur (36%). MAIS vous êtes hors position. Call ?",
+                options: ["OUI équité > pot odds", "NON équité réalisée", "Ça dépend", "Raise en semi-bluff"],
+                correct: 2,
+                explanation: "POT ODDS = 100/(150+100+100) = 100/350 = 28.6%. Équité = 36%. Mathématiquement call. MAIS hors position, votre équité RÉALISÉE est plus faible (vous ne capturerez peut-être que 28-30%). C'est marginal. Ça dépend du niveau de votre adversaire !"
+            },
+            {
+                question: "POT : 50€ | MISE : 150€ (overbet 3x pot). Vous avez nuts (100% équité). Quelle action ?",
+                options: ["Call évidemment", "Raise pour value max", "Fold pour piège", "Slow play"],
+                correct: 0,
+                explanation: "Avec les nuts, vous CALL toujours ! Raise ferait fold ses bluffs. Avec 100% équité, vous voulez qu'il mette son argent. Laissez-le bluffer ! CALL et empochez les 150€."
+            },
+            {
+                question: "POT : 200€ | VOUS ALL-IN : 300€. Adversaire a 35% équité. Doit-il call ?",
+                options: ["OUI", "NON", "Break-even", "Ça dépend"],
+                correct: 1,
+                explanation: "Pour adversaire : POT ODDS = 300/(200+300+300) = 300/800 = 37.5%. Son équité = 35%. 35% < 37.5% → il doit FOLD. C'est -EV pour lui de call (même si c'est proche)."
+            },
+            {
+                question: "POT : 80€ | MISE : 160€ (2x pot). Gutshot (16% équité). Call profitable ?",
+                options: ["OUI", "NON", "Avec implied odds", "Break-even"],
+                correct: 2,
+                explanation: "POT ODDS = 160/(80+160+160) = 160/400 = 40%. Équité directe = 16%. 16% << 40% → FOLD direct. MAIS si stacks sont 200bb+ et adversaire payant, implied odds PEUVENT compenser. Généralement fold."
+            },
+            {
+                question: "POT : 120€ | MISE : 80€. Vous avez set, adversaire probable tirage. Call ou raise ?",
+                options: ["Call (pot control)", "RAISE (protéger)", "Fold jamais", "Check-raise next street"],
+                correct: 1,
+                explanation: "Avec un set contre un tirage probable, vous êtes favori mais pas énormément (~65-70%). RAISE pour charger le tirage et lui donner de mauvaises pot odds ! Si vous check/call, vous lui donnez carte gratuite."
+            },
+            {
+                question: "POT : 100€ | MISE : 50€. Vous avez 12 outs. Quelle est votre EV du call ?",
+                options: ["+12€", "+24€", "+36€", "+46€"],
+                correct: 3,
+                explanation: "Équité = 12×4 = 48%. Pot total après call = 200€. EV = (0.48 × 200) - 50 = 96 - 50 = +46€. Vous investissez 50€ et gagnez en moyenne 96€, donc profit de 46€ sur le long terme !"
+            },
+			{
+                question: "POT : 200€ | MISE : 100€. Vous avez 42% équité. Quelle est votre edge ?",
+                options: ["8%", "12%", "15%", "17%"],
+                correct: 3,
+                explanation: "L'équité requise (breakeven) = 100 / (200 + 100 + 100) = 100/400 = 25%. Votre équité réelle est de 42%. Votre edge est simplement la différence : 42% - 25% = 17%. Vous avez un avantage massif !"
+            },
+            {
+                question: "POT : 100€ | MISE : 200€ (2x overbet). Combien de fois doit-il bluffer pour exploiter ?",
+                options: ["25%", "33%", "40%", "50%"],
+                correct: 1,
+                explanation: "Pour que FOLD soit une erreur, il doit avoir des bluffs suffisants. Pot odds qu'il vous donne = 200/500 = 40%. Donc si vous avez >40% équité vs sa range, vous devez call. Pour qu'il soit exploitable : il doit bluffer au moins 33% du temps (formule MDF)."
+            },
+            {
+                question: "POT : 150€ | MISE : 75€. Vous misez ensuite 100€. Il raise à 250€. Combien payer ?",
+                options: ["100€", "150€", "175€", "250€"],
+                correct: 1,
+                explanation: "Situation : pot initial 150, il mise 75, vous contre-misez 100, il raise à 250 total. Vous aviez mis 100, il demande 250 total, donc vous payez 250 - 100 = 150€ supplémentaires."
+            }
+        ];
+
+        let currentQuestion = 0;
+        let score = 0;
+        let selectedAnswer = null;
+        let showAnswer = false;
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (currentQuestion >= questions.length) {
+                renderCompletion();
+                return;
+            }
+
+            const q = questions[currentQuestion];
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-purple-600 overflow-hidden fade-in">
+                    <div class="bg-gradient-to-r from-purple-800 to-purple-700 p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-purple-300 font-semibold text-lg">Question ${currentQuestion + 1}/${questions.length}</span>
+                            <span class="text-white font-semibold text-lg">Score: ${score}/${questions.length}</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white leading-relaxed">${q.question}</h2>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="space-y-3 mb-6">
+                            ${q.options.map((opt, idx) => `
+                                <button onclick="selectAnswer(${idx})" 
+                                    ${showAnswer ? 'disabled' : ''}
+                                    class="w-full text-left p-4 rounded-lg transition-all ${
+                                        showAnswer 
+                                            ? idx === q.correct
+                                                ? 'bg-green-600 text-white border-2 border-green-400'
+                                                : selectedAnswer === idx
+                                                ? 'bg-red-600 text-white border-2 border-red-400'
+                                                : 'bg-gray-700 text-gray-400'
+                                            : 'bg-gray-700 hover:bg-gray-600 text-white'
+                                    }">
+                                    <span class="font-bold mr-3">${String.fromCharCode(65 + idx)}.</span>
+                                    ${opt}
+                                    ${showAnswer && idx === q.correct ? ' ✓' : ''}
+                                    ${showAnswer && selectedAnswer === idx && idx !== q.correct ? ' ✗' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        
+                        ${showAnswer ? `
+                            <div class="bg-gray-700 rounded-lg p-4 border-2 border-purple-600 fade-in">
+                                <p class="font-semibold text-purple-400 mb-2">Explication détaillée :</p>
+                                <p class="text-gray-200 leading-relaxed mb-4">${q.explanation}</p>
+                                <button onclick="nextQuestion()" 
+                                    class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                                    ${currentQuestion < questions.length - 1 ? 'Question Suivante →' : 'Voir le Résultat 🎯'}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <a href="index.html" class="text-purple-300 hover:text-purple-200 underline">← Retour à l'accueil</a>
+                </div>
+            `;
+        }
+
+        function renderCompletion() {
+            const app = document.getElementById('app');
+            const percentage = Math.round((score / questions.length) * 100);
+            
+            let message = '';
+            if (percentage >= 90) message = "🏆 EXTRAORDINAIRE ! Vous êtes un expert des pot odds !";
+            else if (percentage >= 80) message = "⭐ EXCELLENT ! Vous savez calculer si un call est profitable !";
+            else if (percentage >= 70) message = "💪 TRÈS BON ! Solides bases en pot odds !";
+            else if (percentage >= 60) message = "👍 BON ! Continuez à pratiquer les calculs !";
+            else if (percentage >= 50) message = "📚 Pas mal ! Revoyez les formules de pot odds !";
+            else message = "🎓 Continuez ! Les pot odds sont essentiels, pratiquez encore !";
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-purple-600 p-8 fade-in">
+                    <div class="text-center mb-8">
+                        <h1 class="text-4xl font-bold text-white mb-2">Quiz Terminé !</h1>
+                        <div class="text-7xl font-bold text-purple-400 my-6">${score}/${questions.length}</div>
+                        <div class="text-3xl text-white mb-4">Score : ${percentage}%</div>
+                        <p class="text-xl text-gray-300 px-4">${message}</p>
+                    </div>
+                    
+                    <div class="bg-gray-700 rounded-lg p-6 mb-6">
+                        <h3 class="text-xl font-semibold text-purple-400 mb-4">Analyse détaillée</h3>
+                        <div class="space-y-2 text-gray-300">
+                            <div class="flex justify-between">
+                                <span>Réponses correctes :</span>
+                                <span class="text-green-400 font-semibold">${score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Réponses incorrectes :</span>
+                                <span class="text-red-400 font-semibold">${questions.length - score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Taux de réussite :</span>
+                                <span class="text-yellow-400 font-semibold">${percentage}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-purple-900 bg-opacity-50 p-4 rounded-lg border border-purple-600 mb-6">
+                        <h3 class="text-lg font-semibold text-purple-300 mb-2">📐 Formule clé</h3>
+                        <p class="text-gray-300 text-sm">
+                            <strong>Pot Odds =</strong> Mise à payer / (Pot + Mise + Votre call)<br/>
+                            <strong>Call profitable si :</strong> Équité > Pot Odds
+                        </p>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <button onclick="restart()" 
+                            class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-lg text-lg transition-colors">
+                            🔄 Recommencer le Quiz
+                        </button>
+                        <a href="index.html" 
+                            class="block w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-4 rounded-lg text-center transition-colors">
+                            ← Retour à l'accueil
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function selectAnswer(idx) {
+            if (showAnswer) return;
+            selectedAnswer = idx;
+            showAnswer = true;
+            if (idx === questions[currentQuestion].correct) {
+                score++;
+            }
+            render();
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            selectedAnswer = null;
+            showAnswer = false;
+            render();
+        }
+
+        function restart() {
+            currentQuestion = 0;
+            score = 0;
+            selectedAnswer = null;
+            showAnswer = false;
+            render();
+        }
+
+        render();
+    </script>
+</body>
+</html>

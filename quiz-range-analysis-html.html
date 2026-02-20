@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Poker : Analyse de Ranges</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-orange-900 via-orange-800 to-gray-900 min-h-screen">
+    <div id="app" class="container mx-auto px-4 py-8 max-w-4xl"></div>
+
+    <script>
+        const questions = [
+            {
+                question: "Un joueur TAG ouvre en UTG (position précoce). Quelle est sa range probable ?",
+                options: ["22+, A2s+, broadways", "99+, AK, AQ, AJs", "77+, AJ+, KQs", "Toutes les paires"],
+                correct: 1,
+                explanation: "En UTG, un joueur TAG (Tight-Aggressive) joue TRÈS serré : 99+, AK, AQ, AJs (~8-10% des mains). Il est hors position pour tout le coup, donc il ne joue que des mains premium. Les petites paires et connecteurs suited sont trop risqués."
+            },
+            {
+                question: "Vous avez 88 au bouton. Un TAG ouvre en UTG avec la range : 99+, AK, AQ. Votre équité ?",
+                options: ["25-30%", "35-40%", "45-50%", "55-60%"],
+                correct: 1,
+                explanation: "Contre 99+, AK, AQ : Vous êtes ÉCRASÉ par 99-AA (~18% contre chaque paire supérieure - il y a beaucoup de combos !), mais vous êtes en FLIP contre AK (~53%) et AQ (~55%). MAIS il y a bien plus de combos de paires (6 combos par paire) que de combos d'AK/AQ. Équité réelle : ~38-40%. C'est un call marginal, rentable surtout grâce à la position."
+            },
+            {
+                question: "Un joueur LAG (Loose-Aggressive) 3-bet depuis le bouton après votre open. Sa range est probablement :",
+                options: ["Uniquement QQ+, AK", "Polarisée : JJ+, AK + bluffs (A5s, K5s, suited connectors)", "Linear : TT+, AJ+, KQ", "Que des bluffs"],
+                correct: 1,
+                explanation: "Un LAG 3-bet au bouton avec une range POLARISÉE : des mains fortes (JJ+, AK, AQ) pour value + des bluffs (A5s, K9s, 65s, etc.). Rarement des mains moyennes comme TT ou AJ car elles jouent mal en 3-bet pot."
+            },
+            {
+                question: "Vous ouvrez AJ en MP. Un joueur tight 3-bet en position. Range probable : QQ+, AK. Votre équité ?",
+                options: ["15-20%", "25-30%", "35-40%", "45-50%"],
+                correct: 1,
+                explanation: "Contre QQ+, AK : vous êtes DOMINÉ. Contre AA-QQ : ~20-25% chacun (vous êtes très derrière). Contre AK : ~30% (dominé). Équité totale : ~25-28%. Vous êtes dans une situation difficile, souvent FOLD sauf avec excellente position et stacks profonds."
+            },
+            {
+                question: "Flop K73 rainbow. Vous avez continuation bet avec AQ (air). Adversaire call. Que représente sa range ?",
+                options: ["Uniquement des rois forts", "Range capped : Kx moyen, paires moyennes, tirages", "Range polarisée : nuts ou air", "Que des bluffs"],
+                correct: 1,
+                explanation: "En callant sur ce board sec, sa range est CAPPED (limitée en haut) : il n'a probablement pas KK/77/33 (il aurait raise), ni air complet (il aurait fold). Il a plutôt : Kx moyen (KQ, KJ, KT), paires moyennes (88-JJ), peut-être un tirage backdoor. Cette range call mais ne raise pas."
+            },
+            {
+                question: "Vous êtes en BB avec 72o. UTG ouvre (range : 99+, AK, AQ). Pot odds 25%. Call profitable ?",
+                options: ["OUI, pot odds suffisants", "NON, équité trop faible", "Ça dépend du flop", "Call pour voir flop cheap"],
+                correct: 1,
+                explanation: "72o vs 99+, AK, AQ : votre équité est ~15-18% seulement ! C'est bien MOINS que les 25% requis. Même avec pot odds, c'est FOLD MASSIF. 72o est la pire main et est complètement dominée par cette range serrée. Ne gaspillez pas votre argent !"
+            },
+            {
+                question: "Un joueur ouvre 50% de ses mains au bouton. Vous êtes en BB avec A5s. Call, 3-bet ou fold ?",
+                options: ["Fold trop faible", "Call, bonne playabilité", "3-bet pour value", "Les deux B et C"],
+                correct: 3,
+                explanation: "Contre une range de 50% au bouton (très large), A5s est DEVANT une bonne partie ! Vous pouvez CALL pour playabilité post-flop (tirage couleur, as) OU 3-BET en value/semi-bluff car vous êtes souvent devant sa range large. Les deux options sont profitables !"
+            },
+            {
+                question: "Vous ouvrez QQ en MP. BB 3-bet. Range probable du BB : JJ+, AK, AQs. Quelle action ?",
+                options: ["Fold, il a toujours mieux", "Call pour voir le flop", "4-bet for value", "Ça dépend des stacks"],
+                correct: 1,
+                explanation: "QQ vs JJ+, AK, AQs : vous êtes devant JJ (~82%), en flip contre AK/AQ (~55%), mais derrière KK/AA (~18%). Équité globale : ~55-60%. MAIS un 4-bet fait souvent folder JJ et les As, et vous isole contre KK/AA qui vous battent. CALL est souvent meilleur : vous gardez ses bluffs et mains dominées dans le coup, et vous avez position post-flop pour jouer mieux."
+            },
+            {
+                question: "Flop 7-7-2. Vous check avec KK. Adversaire mise. Sa range inclut probablement :",
+                options: ["100% des As (Ax)", "As + bluffs + paires moyennes", "Uniquement bluffs", "Que des sets"],
+                correct: 1,
+                explanation: "Sur flop A-high après votre check, sa mise représente une range MERGED : des As pour value (AK, AQ, AJ, parfois A faible), des bluffs (tirages, paires moyennes comme TT-QQ qui cherchent à vous faire folder KK/QQ), et parfois des slowplay (AA, sets). C'est MÉLANGÉ."
+            },
+            {
+                question: "Vous êtes en SB avec 76s. 4 joueurs call pré-flop. Votre équité multiway vs ranges larges ?",
+                options: ["15-20%", "20-25%", "25-30%", "30-35%"],
+                correct: 0,
+                explanation: "MULTIWAY (4+ joueurs), les connecteurs suited PERDENT de la valeur. Votre équité chute à ~15-20% car quelqu'un touchera souvent mieux. Les suited connectors sont rentables HEADS-UP ou 3-way max, mais perdent en multiway où les grosses cartes dominent."
+            },
+			{
+                question: "Turn K-Q-J-9. Vous avez AT (quinte). Adversaire mise gros. Quelle range le bat ?",
+                options: ["Toutes les autres quintes", "Seulement un autre AT (split) ou une flush", "N'importe quel autre 10", "Un set"],
+                correct: 1,
+                explanation: "Avec AT sur KQJ9, vous avez la quinte MAX (A-K-Q-J-T). Contrairement aux apparences, un T9 ne fait qu'une quinte hauteur Roi (9-T-J-Q-K) et est donc battu ! Seul un autre AT partage le pot avec vous. Si le board autorise une couleur (flush), c'est la seule main qui peut vous battre."
+            },
+            {
+                question: "Un joueur fait donk bet (mise hors position dans le relanceur pré-flop). Range probable ?",
+                options: ["Range équilibrée", "Range polarisée : très fort ou bluff", "Range medium strength", "Toujours nuts"],
+                correct: 1,
+                explanation: "Les DONK BETS sont généralement POLARISÉS : soit très forts (nuts, sets, crainte du check-back) soit bluffs complets (pas de showdown value). Les joueurs réguliers donk bet rarement, donc quand ça arrive, c'est souvent déséquilibré. Range : top/bottom, peu de milieu."
+            },
+			{
+                question: "Vous avez AK en BB. UTG ouvre, vous 3-bet, il 4-bet. Range de 4-bet UTG : KK+, AK. Votre équité ?",
+                options: ["15-20%", "25-30%", "35-40%", "45-50%"],
+                correct: 2,
+                explanation: "Attention aux bloqueurs ! Vous avez déjà un As et un Roi. Il ne reste chez l'adversaire que 3 combos d'AA, 3 combos de KK, et 9 combos d'AK. Vous êtes mort contre AA (~7%), très mal contre KK (~30%), mais en flip (50%) contre les 9 combos d'AK. Grâce aux bloqueurs qui réduisent les AA/KK, votre équité globale remonte à environ 37-40%."
+            },
+            {
+                question: "Flop 9-8-2 rainbow. Vous avez JT (tirage quinte ouvert). Adversaire range probable : overpaires, top pair, air. Équité ?",
+                options: ["15-20%", "25-30%", "35-40%", "45-50%"],
+                correct: 2,
+                explanation: "JT sur 9-8-2 = OESD (Open-Ended Straight Draw) ! Les 4 dames (Q) et 4 sept (7) font votre quinte = 8 OUTS. Équité = 8×4 = 32% d'ici la rivière. Contre une range mixte (overpaires + top pair + air), vous avez environ 35-40% d'équité totale (32% de toucher + fold equity). Excellent tirage pour semi-bluffer !"
+            },
+            {
+                question: "Vous ouvrez 22 en MP. CO 3-bet (range : JJ+, AK, AQ, TT parfois). Pot odds 25%. Call profitable ?",
+                options: ["OUI, vous pouvez set mine", "NON, équité trop faible", "Ça dépend implied odds", "Call toujours avec paires"],
+                correct: 2,
+                explanation: "22 vs JJ+, AK, AQ : équité directe ~20-25% (vous touchez set ~12% au flop). Pot odds 25% → limite. Mais si stacks 100bb+ et adversaire payant, IMPLIED ODDS compensent ! Si stacks courts (<50bb) → FOLD. Avec 150bb+ et position → CALL pour setmining."
+            },
+            {
+                question: "River A-K-Q-J-T (broadway complet). Vous avez 98. Adversaire mise pot. Quelle range le justifie ?",
+                options: ["Il bluffe toujours", "Range polarisée : nuts ou bluff", "N'importe quelle paire", "Seulement flush"],
+                correct: 1,
+                explanation: "Sur broadway complet (AKQJT), le BOARD LUI-MÊME fait la quinte max ! TOUT LE MONDE a la même quinte (ace-high straight), même avec 72o. Il est IMPOSSIBLE d'avoir une meilleure main qu'une quinte (sauf FLUSH si board suited). Miser pot = BLUFF PUR pour faire folder un split pot, en représentant une flush. C'est ultra-polarisé : soit flush (si possible), soit bluff total. Personne ne mise pot avec juste la quinte du board !"
+            },
+            {
+                question: "Vous ouvrez KQ en MP. BTN 3-bet (range : QQ+, AK, AQ, JJ, bluffs 15%). Fold, call ou 4-bet ?",
+                options: ["Fold évident", "Call pour playabilité", "4-bet bluff", "Les deux A et B"],
+                correct: 3,
+                explanation: "KQ vs cette range mixte : vous êtes DERRIÈRE sa value mais pas écrasé (~35-40% équité). FOLD est souvent bon contre cette range forte. CALL peut être ok avec position pour voir le flop. 4-bet bluff est trop risqué car il call souvent avec QQ+. FOLD ou CALL selon stack et dynamique."
+            },
+            {
+                question: "Flop 7-7-2. Vous c-bet avec AK (air). Adversaire call. Turn A. Range adverse probable ?",
+                options: ["Toujours un 7", "7x, paires moyennes, Ax faible", "Uniquement paires", "Il a toujours mieux"],
+                correct: 1,
+                explanation: "En callant flop 7-7-2, il a range CAPPED : 7x (trip 7), paires moyennes (88-JJ), peut-être Ax faible. Il n'a probablement PAS 77 (il raise au flop). Le turn A est bon pour vous (top paire maintenant), mais attention aux 7x dans sa range qui ont fait full house !"
+            },
+            {
+                question: "Vous avez AA pré-flop. 3 joueurs call votre raise. Flop K-Q-J. Check-check vers vous. Range probable ?",
+                options: ["Personne n'a rien touché", "Slow play avec nuts", "Tirages + paires moyennes + air", "Toujours fold"],
+                correct: 2,
+                explanation: "3 joueurs check sur K-Q-J coordonné signifie généralement : tirages (quinte ouverte très possible), paires moyennes (inquiètes), air. Si quelqu'un avait nuts ou top pair forte, il MISE/CHECK-RAISE. Mais attention : possibilité de slow play. MISE pour protection contre les nombreux tirages !"
+            },
+            {
+                question: "BB défend contre votre open BTN (sa range : 40% des mains). Flop 6-5-4 rainbow. Il check. Action ?",
+                options: ["Check back, vous avez rien", "C-bet large, sa range est faible", "C-bet small, range capped", "All-in bluff"],
+                correct: 1,
+                explanation: "Contre 40% range de défense BB, ce flop 6-5-4 low RATE sa range (peu de mains se connectent). Votre range de BTN contient plus de hautes cartes qui sont des overcards ici. C-BET LARGE pour range advantage ! Il fold souvent, et vous avez beaucoup de fold equity."
+            },
+            {
+                question: "Turn K-Q-J-9 (board très coordonné). Vous avez AT (quinte). Adversaire gros raise. Call profitable si ?",
+                options: ["Jamais call, il a mieux", "Call si pas de flush possible", "Call si équité > pot odds vs sa range", "Always call avec quinte"],
+                correct: 2,
+                explanation: "Même avec une quinte, sur board ultra-coordonné, sa RANGE de gros raise inclut : AK (meilleure quinte), flush si backdoor complété, peut-être full si set au flop. Calculez votre équité CONTRE SA RANGE D'ACTION. Si équité > pot odds → call. Ne call pas aveuglément avec 'just a straight'."
+            },
+            {
+                question: "Vous ouvrez 99 en UTG. MP flat call (range : TT-QQ, AQ, AJ, suited connectors). Équité pré-flop ?",
+                options: ["30-35%", "40-45%", "50-55%", "60-65%"],
+                correct: 2,
+                explanation: "99 vs TT-QQ, AQ, AJ, suited connectors : Vous êtes DERRIÈRE TT-QQ (~18% contre chaque), en FLIP contre AQ/AJ (~55%), DEVANT suited connectors (~80%). Équité totale : ~50-52%. C'est quasi 50-50, ce qui est correct pour continuer avec position et playabilité."
+            },
+            {
+                question: "River A-A-K-7-3. Pot 100€, adversaire mise 200€ (overbet 2x). Vous avez K7 (full). Range adversaire ?",
+                options: ["Range polarisée : Ax ou bluff", "Toujours Ax", "Jamais bluff", "Que des sets"],
+                correct: 0,
+                explanation: "Overbet 2x pot en rivière = range ULTRA-POLARISÉE. Soit il a Ax (trip As au minimum, ou AA pour quads), soit c'est un GROS BLUFF (0% équité, représente As). Avec K7 (full), vous battez les bluffs et les trip As faibles, mais perdez contre AA/Ax plus fort. Décision difficile !"
+            },
+            {
+                question: "SB vs BB, vous ouvrez avec range 50%. BB 3-bet (range : 12%). Vous avez A9o. Action ?",
+                options: ["Call large range", "Fold, dominé par range 12%", "4-bet bluff", "Ça dépend des As dans sa range"],
+                correct: 1,
+                explanation: "BB 3-bet avec 12% (range tight : TT+, AJ+) alors que vous avez 50% range. A9o est FAIBLE contre sa range de 3-bet (vous êtes dominé par AK, AQ, AJ, et crushed par TT+). FOLD est la bonne action. Ne défendez pas trop large contre des 3-bets serrés !"
+            },
+            {
+                question: "Flop 8-8-3. Vous avez KK. Adversaire check-raise votre c-bet. Range probable ?",
+                options: ["Toujours un 8", "8x + bluffs (overpairs, A-high)", "Seulement bluffs", "33 ou 88"],
+                correct: 1,
+                explanation: "Check-raise sur flop paired (8-8-3) = range POLARISÉE. Il a soit : 8x (trip 8), soit overpairs (99-AA) qui transforment en semi-bluff, soit bluffs purs (A-high qui fold sinon). Il a rarement 88/33 (il aurait slowplay). Contre cette range, KK doit souvent CALL pour ne pas se faire exploiter."
+            },
+            {
+                question: "Vous 3-bet avec AK. Adversaire 4-bet (range : QQ+, AK). Pot odds 30%. Équité AK contre range ?",
+                options: ["20-25%", "30-35%", "40-45%", "48-52%"],
+                correct: 1,
+                explanation: "AK vs QQ+, AK : Contre QQ (~46%), contre KK (~30%), contre AA (~7%), vs AK (50%). Équité moyenne : ~31-33%. C'est juste au-dessus du pot odds requirement de 30% ! C'est mathématiquement call, mais MARGINAL. Stack depth et position sont cruciaux pour la décision."
+            },
+            {
+                question: "Turn K-Q-J-5. Vous avez AJ (seconde paire). Adversaire range : top pair+, tirages. Pot 80€, mise 120€. Call ?",
+                options: ["Call, vous avez pair", "Fold, vous êtes derrière", "Raise bluff", "Ça dépend équité vs range"],
+                correct: 3,
+                explanation: "Pot odds = 120/(80+120+120) = 120/320 = 37.5%. Contre 'top pair+, tirages' : vous êtes DERRIÈRE tout top pair (Kx, Qx mieux), derrière les tirages quinte ouverte (~31%), mais devant air. Votre équité vs cette range : ~20-25%. 25% < 37.5% → mathématiquement FOLD. Ne tombez pas amoureux de second pair !"
+            },
+            {
+                question: "River 9-7-6-5-3. Vous avez 87 (quinte). Adversaire mise 1/3 pot. Sa range probable ?",
+                options: ["Polarisée : 8x ou bluff", "Linear : toutes les paires", "Seulement bluff", "Value thin avec quinte aussi"],
+                correct: 3,
+                explanation: "Petite mise 1/3 pot en rivière = souvent VALUE THIN (range linear/merged). Sur 9-7-6-5-3, beaucoup de mains ont quinte (toutes les 8, toutes les 4). Il mise petit pour value avec SA QUINTE aussi, espérant que vous call avec quinte moins bonne ou paire. Pas polarisé ici, mais linear/merged."
+            },
+            {
+                question: "Vous avez KK. 3-bet pré-flop. Adversaire 4-bet puis 5-bet all-in (range : QQ+). Équité KK contre range ?",
+                options: ["50%", "58%", "65%", "71%"],
+                correct: 0,
+                explanation: "KK vs QQ+ (soit QQ, KK, AA). ATTENTION AU COMBINATORIAL ! Vous avez KK donc il reste : 6 combos de QQ, 1 combo de KK (vous bloquez deux rois), 6 combos d'AA. Total 13 combos. Équité : [(6×82%)+(1×50%)+(6×18%)]/13 = [492+50+108]/13 = 650/13 = 50%. Votre équité est exactement 50%, pas 71% ! Vous êtes en coinflip parfait contre cette range QQ+."
+            }
+        ];
+
+        let currentQuestion = 0;
+        let score = 0;
+        let selectedAnswer = null;
+        let showAnswer = false;
+        let showQuestionNav = false;
+
+        function render() {
+            const app = document.getElementById('app');
+            
+            if (currentQuestion >= questions.length) {
+                renderCompletion();
+                return;
+            }
+
+            const q = questions[currentQuestion];
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-orange-600 overflow-hidden fade-in">
+                    <div class="bg-gradient-to-r from-orange-800 to-orange-700 p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-orange-300 font-semibold text-lg">Question ${currentQuestion + 1}/${questions.length}</span>
+                            <div class="flex gap-2 items-center">
+                                <button onclick="toggleNav()" class="bg-orange-700 hover:bg-orange-600 text-white px-3 py-1 text-sm rounded">
+                                    📋 Navigation
+                                </button>
+                                <span class="text-white font-semibold text-lg">Score: ${score}/${questions.length}</span>
+                            </div>
+                        </div>
+                        
+                        ${showQuestionNav ? `
+                            <div class="mt-4 p-4 bg-gray-700 rounded-lg border border-orange-600">
+                                <p class="text-white font-semibold mb-3">Aller à la question :</p>
+                                <div class="grid grid-cols-10 gap-2">
+                                    ${questions.map((_, idx) => `
+                                        <button onclick="goToQuestion(${idx})" 
+                                            class="w-10 h-10 p-0 ${idx === currentQuestion ? 'bg-orange-600' : 'bg-gray-600'} hover:bg-orange-500 text-white rounded">
+                                            ${idx + 1}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <h2 class="text-2xl font-bold text-white leading-relaxed mt-4">${q.question}</h2>
+                    </div>
+                    
+                    <div class="p-6">
+                        <div class="space-y-3 mb-6">
+                            ${q.options.map((opt, idx) => `
+                                <button onclick="selectAnswer(${idx})" 
+                                    ${showAnswer ? 'disabled' : ''}
+                                    class="w-full text-left p-4 rounded-lg transition-all ${
+                                        showAnswer 
+                                            ? idx === q.correct
+                                                ? 'bg-green-600 text-white border-2 border-green-400'
+                                                : selectedAnswer === idx
+                                                ? 'bg-red-600 text-white border-2 border-red-400'
+                                                : 'bg-gray-700 text-gray-400'
+                                            : 'bg-gray-700 hover:bg-gray-600 text-white'
+                                    }">
+                                    <span class="font-bold mr-3">${String.fromCharCode(65 + idx)}.</span>
+                                    ${opt}
+                                    ${showAnswer && idx === q.correct ? ' ✓' : ''}
+                                    ${showAnswer && selectedAnswer === idx && idx !== q.correct ? ' ✗' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        
+                        ${showAnswer ? `
+                            <div class="bg-gray-700 rounded-lg p-4 border-2 border-orange-600 fade-in">
+                                <p class="font-semibold text-orange-400 mb-2">Explication détaillée :</p>
+                                <p class="text-gray-200 leading-relaxed mb-4">${q.explanation}</p>
+                                <button onclick="nextQuestion()" 
+                                    class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
+                                    ${currentQuestion < questions.length - 1 ? 'Question Suivante →' : 'Voir le Résultat 🎯'}
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div class="mt-6 text-center">
+                    <a href="index.html" class="text-orange-300 hover:text-orange-200 underline">← Retour à l'accueil</a>
+                </div>
+            `;
+        }
+
+        function renderCompletion() {
+            const app = document.getElementById('app');
+            const percentage = Math.round((score / questions.length) * 100);
+            
+            let message = '';
+            if (percentage >= 90) message = "🏆 EXCEPTIONNEL ! Vous êtes un maître de l'analyse de ranges !";
+            else if (percentage >= 80) message = "⭐ EXCELLENT ! Vous pensez en ranges comme un pro !";
+            else if (percentage >= 70) message = "💪 TRÈS BON ! Solide compréhension des ranges !";
+            else if (percentage >= 60) message = "👍 BON ! Continuez à analyser les ranges !";
+            else if (percentage >= 50) message = "📚 Pas mal ! Travaillez plus l'analyse de ranges !";
+            else message = "🎓 Continuez ! Penser en ranges est la clé du poker moderne !";
+            
+            app.innerHTML = `
+                <div class="bg-gray-800 rounded-xl shadow-2xl border-2 border-orange-600 p-8 fade-in">
+                    <div class="text-center mb-8">
+                        <h1 class="text-4xl font-bold text-white mb-2">Quiz Terminé !</h1>
+                        <div class="text-7xl font-bold text-orange-400 my-6">${score}/${questions.length}</div>
+                        <div class="text-3xl text-white mb-4">Score : ${percentage}%</div>
+                        <p class="text-xl text-gray-300 px-4">${message}</p>
+                    </div>
+                    
+                    <div class="bg-gray-700 rounded-lg p-6 mb-6">
+                        <h3 class="text-xl font-semibold text-orange-400 mb-4">Analyse détaillée</h3>
+                        <div class="space-y-2 text-gray-300">
+                            <div class="flex justify-between">
+                                <span>Réponses correctes :</span>
+                                <span class="text-green-400 font-semibold">${score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Réponses incorrectes :</span>
+                                <span class="text-red-400 font-semibold">${questions.length - score}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>Taux de réussite :</span>
+                                <span class="text-yellow-400 font-semibold">${percentage}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-orange-900 bg-opacity-50 p-4 rounded-lg border border-orange-600 mb-6">
+                        <h3 class="text-lg font-semibold text-orange-300 mb-2">🎯 Principe clé</h3>
+                        <p class="text-gray-300 text-sm">
+                            <strong>Ne jouez jamais contre UNE main</strong><br/>
+                            Pensez toujours en RANGES : l'ensemble des mains possibles que votre adversaire peut avoir. Votre équité se calcule contre SA RANGE !
+                        </p>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <button onclick="restart()" 
+                            class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-lg text-lg transition-colors">
+                            🔄 Recommencer le Quiz
+                        </button>
+                        <a href="index.html" 
+                            class="block w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-4 rounded-lg text-center transition-colors">
+                            ← Retour à l'accueil
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleNav() {
+            showQuestionNav = !showQuestionNav;
+            render();
+        }
+
+        function goToQuestion(idx) {
+            currentQuestion = idx;
+            selectedAnswer = null;
+            showAnswer = false;
+            showQuestionNav = false;
+            render();
+        }
+
+        function selectAnswer(idx) {
+            if (showAnswer) return;
+            selectedAnswer = idx;
+            showAnswer = true;
+            if (idx === questions[currentQuestion].correct) {
+                score++;
+            }
+            render();
+        }
+
+        function nextQuestion() {
+            currentQuestion++;
+            selectedAnswer = null;
+            showAnswer = false;
+            render();
+        }
+
+        function restart() {
+            currentQuestion = 0;
+            score = 0;
+            selectedAnswer = null;
+            showAnswer = false;
+            showQuestionNav = false;
+            render();
+        }
+
+        render();
+    </script>
+</body>
+</html>
